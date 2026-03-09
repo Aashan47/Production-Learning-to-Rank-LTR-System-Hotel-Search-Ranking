@@ -83,35 +83,41 @@ After within-query normalisation and discretisation into [0, 4], this produces f
 ## Architecture
 
 ```
-Expedia Dataset (9.9M rows · 400K+ queries)
-           │
-    ┌──────▼──────┐
-    │ Preprocess  │  dtype optimisation, missing value imputation
-    └──────┬──────┘
-           │
-    ┌──────▼───────────────┐
-    │ Query-Level Split    │  70 / 15 / 15
-    └──┬───────────────────┘
-       │ train
-    ┌──▼────────────────┐
-    │ Historical Aggs   │  Bayesian CTR, booking rate → joined to val/test
-    └──┬────────────────┘
-       │
-    ┌──▼────────────────┐
-    │ Feature Pipeline  │  raw + match + historical → 40 features
-    └──┬────────────────┘
-       │
-    ┌──▼────────────────┐
-    │ IPS + Labels      │  power-law propensity · composite grades 0–4
-    └──┬────────────────┘
-       │
-    ┌──▼────────────────┐
-    │ LGBMRanker        │  LambdaMART · early stopping on NDCG@5 (~170 trees)
-    └──┬────────────────┘
-       │
-    ┌──▼────────────────┐
-    │ Evaluation        │  unbiased NDCG@5/10, MRR · feature importance
-    └───────────────────┘
+Expedia Hotel Search Dataset  (9.9M rows · 400K+ queries)
+                    │
+          ┌─────────▼─────────┐
+          │   Preprocessing   │  dtype optimisation (~50% memory reduction)
+          │                   │  missing values: competitor→0, review→0
+          └─────────┬─────────┘  visitor history→-1 sentinel, rest→median
+                    │
+          ┌─────────▼──────────────────────┐
+          │   Query-Level Split  70/15/15  │
+          └───┬──────────────────────┬─────┘
+              │  train               │  val / test
+    ┌─────────▼──────────────┐       │
+    │  Historical Aggregates │       │  (joined by prop_id / dest_id)
+    │  prop CTR, booking rate│───────┘
+    │  dest averages (Bayes) │
+    └─────────┬──────────────┘
+              │
+    ┌─────────▼──────────────┐
+    │  Feature Pipeline      │  raw + match + historical → 40 cols
+    └─────────┬──────────────┘
+              │
+    ┌─────────▼──────────────┐
+    │  IPS Weight Estimation │  power-law propensity from random_bool=1
+    │  Composite Labels      │  click + price-tiered booking → grades 0–4
+    └─────────┬──────────────┘
+              │
+    ┌─────────▼──────────────┐
+    │  LGBMRanker            │  LambdaMART · early stopping @NDCG@5
+    │  (LambdaMART)          │  best iteration ≈ 170 trees
+    └─────────┬──────────────┘
+              │
+    ┌─────────▼──────────────┐
+    │  Unbiased Evaluation   │  NDCG@5/10, MRR on random_bool=1 queries
+    │  Error Analysis        │  per-query distribution, feature importance
+    └────────────────────────┘
 ```
 
 ---
